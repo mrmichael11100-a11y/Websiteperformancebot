@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Website Performance Analyzer</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 16px;
+            min-height: 100vh;
+        }
+
+        /* Telegram-only detection banner */
+        .telegram-banner {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, #666);
+        }
+
+        .telegram-banner .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4CAF50;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: var(--tg-theme-text-color, #000000);
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: var(--tg-theme-hint-color, #666666);
+            font-size: 14px;
+        }
+
+        .input-group {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--tg-theme-button-color, #3390ec);
+            border-radius: 8px;
+            font-size: 16px;
+            background: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--tg-theme-button-color, #3390ec);
+        }
+
+        .input-group input::placeholder {
+            color: var(--tg-theme-hint-color, #999999);
+        }
+
+        .btn-analyze {
+            width: 100%;
+            padding: 14px;
+            background: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.3s, transform 0.2s;
+        }
+
+        .btn-analyze:hover {
+            opacity: 0.9;
+        }
+
+        .btn-analyze:active {
+            transform: scale(0.98);
+        }
+
+        .btn-analyze:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 30px;
+            display: none;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-top: 4px solid var(--tg-theme-button-color, #3390ec);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .score-card {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin: 0 auto 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: 700;
+            color: white;
+            position: relative;
+        }
+
+        .score-circle.excellent { background: #4CAF50; }
+        .score-circle.good { background: #8BC34A; }
+        .score-circle.average { background: #FFC107; }
+        .score-circle.poor { background: #FF9800; }
+        .score-circle.fail { background: #f44336; }
+
+        .grade-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .grade-badge.excellent { background: #4CAF50; color: white; }
+        .grade-badge.good { background: #8BC34A; color: white; }
+        .grade-badge.average { background: #FFC107; color: black; }
+        .grade-badge.poor { background: #FF9800; color: white; }
+        .grade-badge.fail { background: #f44336; color: white; }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .metric-card .label {
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, #666666);
+            margin-bottom: 4px;
+        }
+
+        .metric-card .value {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .detail-section {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .detail-section h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--tg-theme-hint-color, #ddd);
+        }
+
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+
+        .detail-item .label {
+            color: var(--tg-theme-hint-color, #666666);
+            font-size: 14px;
+        }
+
+        .detail-item .value {
+            font-weight: 500;
+            color: var(--tg-theme-text-color, #000000);
+            font-size: 14px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.success { background: #4CAF50; color: white; }
+        .status-badge.fail { background: #f44336; color: white; }
+        .status-badge.warning { background: #FFC107; color: black; }
+
+        .error-message {
+            background: #f44336;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px 0 10px;
+            color: var(--tg-theme-hint-color, #666666);
+            font-size: 12px;
+        }
+
+        @media (max-width: 480px) {
+            .metrics-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+            
+            .metric-card {
+                padding: 10px;
+            }
+            
+            .metric-card .value {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Telegram-only indicator -->
+        <div class="telegram-banner">
+            <span class="dot"></span>
+            <span>Connected via Telegram</span>
+            <span style="margin-left: auto; font-size: 10px; opacity: 0.7;">v1.0</span>
+        </div>
+
+        <div class="header">
+            <h1>🚀 Website Performance</h1>
+            <p>Analyze any website's performance and SEO</p>
+        </div>
+
+        <div class="input-group">
+            <label for="urlInput">Enter Website URL</label>
+            <input type="url" id="urlInput" placeholder="https://example.com" value="https://example.com">
+        </div>
+
+        <button class="btn-analyze" id="analyzeBtn">Analyze Website</button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Analyzing website performance...</p>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="results" id="results">
+            <div class="score-card">
+                <div class="score-circle" id="scoreCircle">0</div>
+                <div style="font-size: 18px; font-weight: 600;" id="scoreLabel">Performance Score</div>
+                <div class="grade-badge" id="gradeBadge">-</div>
+            </div>
+
+            <div class="metrics-grid" id="metricsGrid">
+                <div class="metric-card">
+                    <div class="label">Page Size</div>
+                    <div class="value" id="pageSize">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Load Time</div>
+                    <div class="value" id="loadTime">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Total Elements</div>
+                    <div class="value" id="totalElements">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Images</div>
+                    <div class="value" id="images">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Scripts</div>
+                    <div class="value" id="scripts">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="label">Stylesheets</div>
+                    <div class="value" id="stylesheets">-</div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h3>🔍 SEO & Best Practices</h3>
+                <div class="detail-item">
+                    <span class="label">Meta Description</span>
+                    <span class="value" id="metaDescription">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Meta Keywords</span>
+                    <span class="value" id="metaKeywords">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Viewport Meta</span>
+                    <span class="value" id="viewport">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Page Title</span>
+                    <span class="value" id="pageTitle">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Favicon</span>
+                    <span class="value" id="favicon">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Alt Tags (Images)</span>
+                    <span class="value" id="altTags">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">SSL Certificate</span>
+                    <span class="value" id="ssl">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">External Links</span>
+                    <span class="value" id="externalLinks">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="label">Internal Links</span>
+                    <span class="value" id="internalLinks">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            ⚡ Only available in Telegram
+        </div>
+    </div>
+
+    <script>
+        // Initialize Telegram Web App
+        const Telegram = window.Telegram.WebApp;
+        Telegram.ready();
+        Telegram.expand();
+
+        // Security: Check if running in Telegram
+        function checkTelegramEnvironment() {
+            const isTelegram = window.Telegram && window.Telegram.WebApp;
+            if (!isTelegram) {
+                document.body.innerHTML = `
+                    <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;padding:20px;text-align:center;">
+                        <div style="font-size:64px;margin-bottom:20px;">🚫</div>
+                        <h1 style="color:#e94560;">Access Denied</h1>
+                        <p style="color:#666;max-width:400px;line-height:1.6;">This application is only available within the Telegram app. Please open it from Telegram.</p>
+                        <p style="color:#999;font-size:14px;margin-top:20px;">If you're already in Telegram, make sure to open this link from a bot.</p>
+                    </div>
+                `;
+                return false;
+            }
+            return true;
+        }
+
+        // Run security check
+        if (!checkTelegramEnvironment()) {
+            throw new Error('Access denied - Telegram only');
+        }
+
+        const urlInput = document.getElementById('urlInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const errorMessage = document.getElementById('errorMessage');
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+            setTimeout(() => {
+                errorMessage.classList.remove('active');
+            }, 5000);
+        }
+
+        function getScoreClass(score) {
+            if (score >= 80) return 'excellent';
+            if (score >= 70) return 'good';
+            if (score >= 60) return 'average';
+            if (score >= 50) return 'poor';
+            return 'fail';
+        }
+
+        function updateUI(data) {
+            const metrics = data.metrics;
+            
+            // Update score
+            const scoreCircle = document.getElementById('scoreCircle');
+            const scoreClass = getScoreClass(metrics.performanceScore);
+            scoreCircle.textContent = metrics.performanceScore;
+            scoreCircle.className = `score-circle ${scoreClass}`;
+            
+            // Update grade
+            const gradeBadge = document.getElementById('gradeBadge');
+            gradeBadge.textContent = `Grade: ${metrics.grade}`;
+            gradeBadge.className = `grade-badge ${scoreClass}`;
+            
+            // Update metrics
+            document.getElementById('pageSize').textContent = metrics.pageSize;
+            document.getElementById('loadTime').textContent = metrics.loadTime;
+            document.getElementById('totalElements').textContent = metrics.totalElements;
+            document.getElementById('images').textContent = metrics.images;
+            document.getElementById('scripts').textContent = metrics.scripts;
+            document.getElementById('stylesheets').textContent = metrics.stylesheets;
+            
+            // Update SEO details
+            document.getElementById('metaDescription').innerHTML = metrics.hasMetaDescription ? 
+                '<span class="status-badge success">✓ Present</span>' : 
+                '<span class="status-badge fail">✗ Missing</span>';
+            
+            document.getElementById('metaKeywords').innerHTML = metrics.hasMetaKeywords ? 
+                '<span class="status-badge success">✓ Present</span>' : 
+                '<span class="status-badge fail">✗ Missing</span>';
+            
+            document.getElementById('viewport').innerHTML = metrics.hasViewport ? 
+                '<span class="status-badge success">✓ Present</span>' : 
+                '<span class="status-badge fail">✗ Missing</span>';
+            
+            document.getElementById('pageTitle').innerHTML = metrics.hasTitle ? 
+                '<span class="status-badge success">✓ Present</span>' : 
+                '<span class="status-badge fail">✗ Missing</span>';
+            
+            document.getElementById('favicon').innerHTML = metrics.hasFavicon ? 
+                '<span class="status-badge success">✓ Present</span>' : 
+                '<span class="status-badge fail">✗ Missing</span>';
+            
+            document.getElementById('altTags').innerHTML = metrics.hasAltTags ? 
+                `<span class="status-badge success">✓ ${metrics.imagesWithoutAlt} missing</span>` : 
+                `<span class="status-badge fail">✗ ${metrics.imagesWithoutAlt} missing</span>`;
+            
+            document.getElementById('ssl').innerHTML = metrics.hasSSL ? 
+                '<span class="status-badge success">✓ Secure</span>' : 
+                '<span class="status-badge fail">✗ Not Secure</span>';
+            
+            document.getElementById('externalLinks').textContent = metrics.externalLinks;
+            document.getElementById('internalLinks').textContent = metrics.internalLinks;
+            
+            // Show results
+            results.classList.add('active');
+            loading.classList.remove('active');
+            analyzeBtn.disabled = false;
+            analyzeBtn.textContent = 'Analyze Website';
+            
+            // Send data back to Telegram bot
+            Telegram.sendData(JSON.stringify({
+                url: data.url,
+                score: metrics.performanceScore,
+                grade: metrics.grade,
+                loadTime: metrics.loadTime,
+                pageSize: metrics.pageSize
+            }));
+        }
+
+        async function analyzeWebsite() {
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                showError('Please enter a valid URL');
+                return;
+            }
+
+            // Validate URL
+            let cleanUrl = url;
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                cleanUrl = 'https://' + url;
+            }
+
+            try {
+                new URL(cleanUrl);
+            } catch (e) {
+                showError('Please enter a valid URL (e.g., example.com)');
+                return;
+            }
+
+            // Show loading
+            loading.classList.add('active');
+            results.classList.remove('active');
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Analyzing...';
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: cleanUrl })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || data.message || 'Failed to analyze website');
+                }
+
+                updateUI(data);
+            } catch (error) {
+                showError(error.message || 'Failed to analyze website. Please try again.');
+                loading.classList.remove('active');
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Analyze Website';
+            }
+        }
+
+        // Event listeners
+        analyzeBtn.addEventListener('click', analyzeWebsite);
+
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                analyzeWebsite();
+            }
+        });
+
+        // Auto-analyze example on load
+        setTimeout(() => {
+            analyzeWebsite();
+        }, 500);
+
+        console.log('Website Performance Mini App loaded in Telegram');
+    </script>
+</body>
+</html>
